@@ -1,5 +1,3 @@
-
-
 # manual setting
 max_frames: 32  
 resolution: [512, 768]  
@@ -17,16 +15,12 @@ test_list_path: [
   [4, "data/images/7.jpeg", "data/saved_pose/ubc","data/saved_frames/ubc","data/saved_pkl/ubc.pkl", 14],
 ]
 
-
 log_dir: 'results' # save dir
 
-test_model:  checkpoints/animate-x_ckpt.pth  
+test_model:  /animatex/checkpoints/animate-x_ckpt.pth  
 partial_keys: [
                     ['image','local_image', 'dwpose','pose_embeddings'], 
                 ]
-
-
-
 
 # default settings
 TASK_TYPE: inference_animate_x_entrance
@@ -44,7 +38,7 @@ use_fps_condition: False
 embedder: {
     'type': 'FrozenOpenCLIPTextVisualEmbedder',
     'layer': 'penultimate',
-    'pretrained':  'checkpoints/open_clip_pytorch_model.bin' 
+    'pretrained':  '/animatex/checkpoints/open_clip_pytorch_model.bin' 
 }
 
 auto_encoder: {
@@ -63,7 +57,7 @@ auto_encoder: {
         'video_kernel_size': [3, 1, 1]
     },
     'embed_dim': 4,
-    'pretrained': 'checkpoints/v2-1_512-ema-pruned.ckpt'
+    'pretrained': '/animatex/checkpoints/v2-1_512-ema-pruned.ckpt'
 } 
 
 

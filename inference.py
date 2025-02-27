@@ -1,13 +1,3 @@
-import os
-import sys
-import copy
-import json
-import math
-import random
-import logging
-import itertools
-import numpy as np
-
 from utils.config import Config
 from utils.registry_class import INFER_ENGINE
 

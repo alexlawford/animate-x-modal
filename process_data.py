@@ -29,15 +29,12 @@ from dwpose.wholebody import Wholebody
 import pickle
 from PIL import Image
 
-
 def smoothing_factor(t_e, cutoff):
     r = 2 * math.pi * cutoff * t_e
     return r / (r + 1)
 
-
 def exponential_smoothing(a, x, x_prev):
     return a * x + (1 - a) * x_prev
-
 
 class OneEuroFilter:
     def __init__(self, t0, x0, dx0=0.0, min_cutoff=1.0, beta=0.0,
@@ -72,8 +69,6 @@ class OneEuroFilter:
         self.t_prev = t
 
         return x_hat
-
-
 
 def get_logger(name="essmc2"):
     logger = logging.getLogger(name)
@@ -194,7 +189,6 @@ def dw_func(_id, frame, dwpose_model, dwpose_woface_folder='tmp_dwpose_wo_face',
 
     return pose
 
-
 def video2img(video_path, img_dir): 
     # pdb.set_trace()
     video_capture = cv2.VideoCapture(video_path)
@@ -213,7 +207,6 @@ def video2img(video_path, img_dir):
         success, image = video_capture.read()
         count += 1
         print("frame: ", count)
-
 
 def mp_main(args):
     os.makedirs(args.saved_pose_dir, exist_ok = True)
@@ -305,7 +298,6 @@ def mp_main(args):
         except:
             print(file_path," wrong")
 logger = get_logger('dw pose extraction')
-
 
 # python  
 

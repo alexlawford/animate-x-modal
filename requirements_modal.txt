@@ -164,6 +164,7 @@ scikit-learn==1.4.0
 scipy==1.11.4
 semantic-version==2.10.0
 sentencepiece==0.1.99
+setuptools
 shellingham==1.5.4
 simplejson==3.19.2
 six==1.16.0

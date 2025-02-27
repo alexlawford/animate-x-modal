@@ -5,12 +5,12 @@ app = modal.App(name="animate-x-app")
 RT = "/animatex"
 
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    modal.Image.debian_slim(python_version="3.13")
     .pip_install_from_requirements(
-        "requirements-modal.txt"
+        "requirements_modal.txt"
     )
-    .add_local_dir("configs", "configs")
-    .add_local_python_source("inference.py", "process_data.py")
+    .add_local_dir("configs/", "/configs/")
+    .add_local_python_source("inference", "process_data")
 )
 
 volume = modal.Volume.from_name("animate-x", create_if_missing=True)
@@ -48,30 +48,30 @@ class Model:
 
     @modal.method()
     def run_inference():
-        import subprocess
+        # import subprocess
 
-        # Pre-process the video
-        command = [
-            "python", "process_data.py",
-            "--source_video_paths", "animatex/data/videos",
-            "--saved_pose_dir", "animatex/data/saved_pkl",
-            "--saved_pose", "animatex/data/saved_pose",
-            "--saved_frame_dir", "animatex/data/saved_frames"
-        ]
+        # # Pre-process the video
+        # command = [
+        #     "python", "process_data.py",
+        #     "--source_video_paths", "animatex/data/videos",
+        #     "--saved_pose_dir", "animatex/data/saved_pkl",
+        #     "--saved_pose", "animatex/data/saved_pose",
+        #     "--saved_frame_dir", "animatex/data/saved_frames"
+        # ]
         
-        result = subprocess.run(command, capture_output=True, text=True)
-        print(result.stdout)
-        print(result.stderr)
+        # result = subprocess.run(command, capture_output=True, text=True)
+        # print(result.stdout)
+        # print(result.stderr)
 
-        # Run Animate-X
-        command_inference = [
-            "python", "inference.py",
-            "--cfg", "configs/Animate_X_infer.yaml"
-        ]
+        # # Run Animate-X
+        # command_inference = [
+        #     "python", "inference.py",
+        #     "--cfg", "configs/Animate_X_infer.yaml"
+        # ]
         
-        result_inference = subprocess.run(command_inference, capture_output=True, text=True)
-        print(result_inference.stdout)
-        print(result_inference.stderr)
+        # result_inference = subprocess.run(command_inference, capture_output=True, text=True)
+        # print(result_inference.stdout)
+        # print(result_inference.stderr)
 
         return True
 

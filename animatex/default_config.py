@@ -6,13 +6,13 @@ from easydict import EasyDict
 import os
 
 cfg = EasyDict(__name__='Config: VideoLDM Decoder')
+cfg.debug = False
 
 # -------------------------------distributed training--------------------------
 pmi_world_size = int(os.getenv('WORLD_SIZE', 1))
 gpus_per_machine = torch.cuda.device_count()
 world_size = pmi_world_size * gpus_per_machine
 # -----------------------------------------------------------------------------
-
 
 # ---------------------------Dataset Parameter---------------------------------
 cfg.mean = [0.5, 0.5, 0.5]

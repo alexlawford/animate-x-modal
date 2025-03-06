@@ -4,9 +4,10 @@ def build_func(cfg, registry, **kwargs):
     """
     Except for config, if passing a list of dataset config, then return the concat type of it
     """
-
-
     return build_from_config(cfg, registry, **kwargs)
+
+
+#     INFER_ENGINE.build(dict(type=cfg_update.TASK_TYPE), cfg_update=cfg_update.cfg_dict)
 
 AUTO_ENCODER = Registry("AUTO_ENCODER", build_func=build_func)
 DATASETS = Registry("DATASETS", build_func=build_func)

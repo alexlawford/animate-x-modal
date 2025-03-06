@@ -10,8 +10,8 @@ class Wholebody:
         device = 'cuda' # 'cpu' #
         providers = ['CPUExecutionProvider'
                   ] if device == 'cpu' else ['CUDAExecutionProvider']
-        onnx_det =  'checkpoints/yolox_l.onnx' 
-        onnx_pose = 'checkpoints/dw-ll_ucoco_384.onnx'
+        onnx_det =  '/checkpoints/yolox_l.onnx' 
+        onnx_pose = '/checkpoints/dw-ll_ucoco_384.onnx'
 
         self.session_det = ort.InferenceSession(path_or_bytes=onnx_det, providers=providers)
         self.session_pose = ort.InferenceSession(path_or_bytes=onnx_pose, providers=providers)

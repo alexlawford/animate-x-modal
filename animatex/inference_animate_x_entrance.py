@@ -1,284 +1,332 @@
-import os
-import re
-import os.path as osp
-import sys
-sys.path.insert(0, '/'.join(osp.realpath(__file__).split('/')[:-4]))
-import json
-import math
-import torch
-import pynvml
-import logging
-import cv2
-import numpy as np
-from PIL import Image
-from tqdm import tqdm
-import torch.cuda.amp as amp
-from importlib import reload
-import torch.distributed as dist
-import torch.multiprocessing as mp
-import random
-from einops import rearrange
-import torchvision.transforms as T
-import torchvision.transforms.functional as TF
-from torch.nn.parallel import DistributedDataParallel
+# import os
+# import re
+# import os.path as osp
+# import sys
+# sys.path.insert(0, '/'.join(osp.realpath(__file__).split('/')[:-4]))
+# import torch
+# import pynvml
+# import logging
+# import cv2
+# import numpy as np
+# from PIL import Image
+# from importlib import reload
+# import torch.distributed as dist
+# import torch.multiprocessing as mp
+# from einops import rearrange
+# import torchvision.transforms as T
+# from torch.nn.parallel import DistributedDataParallel
 
-from .default_config import cfg
-from .model.autoencoder import get_first_stage_encoding
+# from .default_config import cfg
+# from .model.autoencoder import get_first_stage_encoding
 
-import utils.transforms as data
-from utils.seed import setup_seed
-from utils.multi_port import find_free_port
-from utils.distributed import generalized_all_gather
-from utils.video_op import save_video_multiple_conditions_not_gif_horizontal_3col, save_video_multiple_conditions_not_gif_horizontal_1col
-from utils.registry_class import INFER_ENGINE, MODEL, EMBEDDER, AUTO_ENCODER, DIFFUSION
+# import utils.transforms as data
+# from utils.seed import setup_seed
+# from utils.multi_port import find_free_port
+# from utils.distributed import generalized_all_gather
+# from utils.video_op import save_video_multiple_conditions_not_gif_horizontal_3col, save_video_multiple_conditions_not_gif_horizontal_1col
 
-from copy import copy
-import cv2, pickle
+# from copy import copy
+# import cv2, pickle
 
+# from animatex.diffusion.diffusion_ddim import DiffusionDDIM
 
-@INFER_ENGINE.register_function()
-def inference_animate_x_entrance(cfg_update,  **kwargs):
-    for k, v in cfg_update.items():
-        if isinstance(v, dict) and k in cfg:
-            cfg[k].update(v)
-        else:
-            cfg[k] = v
+# diffusion = DiffusionDDIM(
+#     schedule='linear_sd',
+#     schedule_param={
+#         'num_timesteps': 1000,
+#         "init_beta": 0.00085, 
+#         "last_beta": 0.0120,
+#         'zero_terminal_snr': True,
+#     },
+#     mean_type='v',
+#     var_type='fixed_small',
+#     loss_type='mse',
+#     epsilon = 1e-12,
+#     rescale_timesteps=False,
+#     noise_strength=0.1, 
+# )
+
+# from animatex.model.clip_embedder import FrozenOpenCLIPTextVisualEmbedder
+
+# clip_encoder = FrozenOpenCLIPTextVisualEmbedder(
+#     layer='penultimate',
+#     pretrained='/checkpoints/open_clip_pytorch_model.bin'
+# )
+
+# from animatex.model.autoencoder import AutoencoderKL
+
+# autoencoder = AutoencoderKL(
+#     ddconfig = {
+#         'double_z': True, 
+#         'z_channels': 4,
+#         'resolution': 256, 
+#         'in_channels': 3,
+#         'out_ch': 3, 
+#         'ch': 128, 
+#         'ch_mult': [1, 2, 4, 4],
+#         'num_res_blocks': 2, 
+#         'attn_resolutions': [], 
+#         'dropout': 0.0,
+#         'video_kernel_size': [3, 1, 1]
+#     },
+#     embed_dim = 4,
+#     pretrained = '/checkpoints/v2-1_512-ema-pruned.ckpt'
+# )
+
+# from animatex.model.unet_animate_x import UNetSD_Animate_X
+
+# unet = UNetSD_Animate_X(
+#     config=None,
+#     in_dim=4,
+#     num=0,
+#     no_hand=True,
+#     dim=320,
+#     y_dim=1024,
+#     context_dim=1024,
+#     out_dim=4,
+#     dim_mult=[1, 2, 4, 4],
+#     num_heads=8,
+#     head_dim=64,
+#     num_res_blocks=2,
+#     dropout=0.1,
+#     temporal_attention=True,
+#     num_tokens=4,
+#     temporal_attn_times=1,
+#     use_checkpoint=True,
+#     use_fps_condition=False,
+#     use_sim_mask=False
+# )
+
+# def inference_animate_x_entrance(cfg_update):
+#     for k, v in cfg_update.items():
+#         if isinstance(v, dict) and k in cfg:
+#             cfg[k].update(v)
+#         else:
+#             cfg[k] = v
+
+#     if not 'MASTER_ADDR' in os.environ:
+#         os.environ['MASTER_ADDR']='localhost'
+#         os.environ['MASTER_PORT']= find_free_port()
+#     cfg.pmi_rank = int(os.getenv('RANK', 0)) 
+#     cfg.pmi_world_size = int(os.getenv('WORLD_SIZE', 1))
     
-    if not 'MASTER_ADDR' in os.environ:
-        os.environ['MASTER_ADDR']='localhost'
-        os.environ['MASTER_PORT']= find_free_port()
-    cfg.pmi_rank = int(os.getenv('RANK', 0)) 
-    cfg.pmi_world_size = int(os.getenv('WORLD_SIZE', 1))
+#     if cfg.debug:
+#         cfg.gpus_per_machine = 1
+#         cfg.world_size = 1
+#     else:
+#         cfg.gpus_per_machine = torch.cuda.device_count()
+#         cfg.world_size = cfg.pmi_world_size * cfg.gpus_per_machine
     
-    if cfg.debug:
-        cfg.gpus_per_machine = 1
-        cfg.world_size = 1
-    else:
-        cfg.gpus_per_machine = torch.cuda.device_count()
-        cfg.world_size = cfg.pmi_world_size * cfg.gpus_per_machine
+#     if cfg.world_size == 1:
+#         worker(0, cfg, cfg_update)
+#     else:
+#         mp.spawn(worker, nprocs=cfg.gpus_per_machine, args=(cfg, cfg_update))
+#     return cfg
+
+# def process_single_pose_embedding(dwpose_source_data):
+#     bodies = dwpose_source_data['bodies']['candidate'][:18]
+#     results = np.swapaxes(bodies, 0, 1) # (32, 2, 128)
+#     return results
+
+# def make_masked_images(imgs, masks):
+#     masked_imgs = []
+#     for i, mask in enumerate(masks):        
+#         # concatenation
+#         masked_imgs.append(torch.cat([imgs[i] * (1 - mask), (1 - mask)], dim=1))
+#     return torch.stack(masked_imgs, dim=0)
+
+# def process_single_pose_embedding_katong(dwpose_source_data, index):
+#     bodies = dwpose_source_data['bodies'][index][:18]
+#     results = bodies
+#     results = np.swapaxes(results, 0, 1) # (32, 2, 128)
+#     return results
+
+# def load_video_frames(ref_image_path, pose_file_path, original_driven_video_path, pose_embedding_key, train_trans, vit_transforms, train_trans_pose, max_frames=32, frame_interval = 1, resolution=[512, 768], get_first_frame=True, vit_resolution=[224, 224]):
+
+#     pose_embedding_dim = 18
     
-    if cfg.world_size == 1:
-        worker(0, cfg, cfg_update)
-    else:
-        mp.spawn(worker, nprocs=cfg.gpus_per_machine, args=(cfg, cfg_update))
-    return cfg
+#     for _ in range(5):
+#         # try:
+#             dwpose_all = {}
+#             frames_all = {}
 
-def process_single_pose_embedding(dwpose_source_data):
+#             original_driven_video_all = {}
+#             original_driven_video_frame_all = {}
+#             pose_embedding_all = {}
+        
 
+#             # 打开文件（以二进制读取模式）
+#             with open(pose_embedding_key, 'rb') as file:
+#                 # 使用 pickle.load() 方法读取字典
+#                 loaded_data = pickle.load(file)
 
-    bodies = dwpose_source_data['bodies']['candidate'][:18]
+#             try:
+#                 ref_pose_embedding_key = pose_embedding_key.replace(".pkl", "_ref_pose.pkl")
+#                 with open(ref_pose_embedding_key, 'rb') as file:
+#                     # 使用 pickle.load() 方法读取字典
+#                     ref_loaded_data = pickle.load(file)
+#                     ref_pose_embedding = process_single_pose_embedding(ref_loaded_data)
 
-    results = np.swapaxes(bodies, 0, 1) # (32, 2, 128)
-    return results
-
-def make_masked_images(imgs, masks):
-    masked_imgs = []
-    for i, mask in enumerate(masks):        
-        # concatenation
-        masked_imgs.append(torch.cat([imgs[i] * (1 - mask), (1 - mask)], dim=1))
-    return torch.stack(masked_imgs, dim=0)
-
-def process_single_pose_embedding_katong(dwpose_source_data, index):
-
-
-    bodies = dwpose_source_data['bodies'][index][:18]
-
+#             except:
+#                 ref_pose_embedding = process_single_pose_embedding_katong(loaded_data, 0)
 
 
-    results = bodies
-    results = np.swapaxes(results, 0, 1) # (32, 2, 128)
-    return results
+#             first_image = True
+#             for ii_index in sorted(os.listdir(pose_file_path)):
+#                 # ii_index = ii_index.strip()
 
-def load_video_frames(ref_image_path, pose_file_path, original_driven_video_path, pose_embedding_key, train_trans, vit_transforms, train_trans_pose, max_frames=32, frame_interval = 1, resolution=[512, 768], get_first_frame=True, vit_resolution=[224, 224]):
+#                 if ii_index != "ref_pose.jpg":
 
-    pose_embedding_dim = 18
+#                     dwpose_all[ii_index] = Image.open(pose_file_path+"/"+ii_index)
+#                     frames_all[ii_index] = Image.fromarray(cv2.cvtColor(cv2.imread(ref_image_path),cv2.COLOR_BGR2RGB)) 
 
-    
-    for _ in range(5):
-        # try:
-            dwpose_all = {}
-            frames_all = {}
+#                     try:
+#                         i_index = int(ii_index.split('.')[0])
+#                     except:
+#                         i_index = int(ii_index.split('.')[0].split('_')[1])
+#                     try:
+#                         pose_embedding_all[ii_index] = process_single_pose_embedding( loaded_data[i_index]) # (2, 128)
+#                     except:
+#                         pose_embedding_all[ii_index] = process_single_pose_embedding_katong( loaded_data, i_index) # (2, 128)
 
-            original_driven_video_all = {}
-            original_driven_video_frame_all = {}
-            pose_embedding_all = {}
+#             for ii_index in sorted(os.listdir(original_driven_video_path)):
+
+#                 original_driven_video_all[ii_index] = Image.open(original_driven_video_path+"/"+ii_index)
+
+
+#                 # frames_all[ii_index] = Image.open(ref_image_path)
+#             pose_ref_path = os.path.join(pose_file_path, "ref_pose.jpg")
+#             if os.path.exists(pose_ref_path) == False:
+#                 pose_ref_path = os.path.join(pose_file_path, os.listdir(pose_file_path)[0])
+#             pose_ref = Image.open(pose_ref_path)
+#             first_eq_ref = False
+
+#             # sample max_frames poses for video generation
+#             stride = frame_interval
+#             _total_frame_num = len(frames_all)
+#             cover_frame_num = (stride * (max_frames-1)+1)
+#             if _total_frame_num < cover_frame_num:
+#                 print('_total_frame_num is smaller than cover_frame_num, the sampled frame interval is changed')
+#                 start_frame = 0   # we set start_frame = 0 because the pose alignment is performed on the first frame
+#                 end_frame = _total_frame_num
+#                 stride = max((_total_frame_num-1//(max_frames-1)),1)
+#                 end_frame = stride*max_frames
+#             else:
+#                 start_frame = 0  # we set start_frame = 0 because the pose alignment is performed on the first frame
+#                 end_frame = start_frame + cover_frame_num
             
+#             frame_list = []
+#             dwpose_list = []
+#             original_driven_video_list = []
+#             pose_embedding_list = []
+#             random_ref_frame = frames_all[list(frames_all.keys())[0]]
+#             if random_ref_frame.mode != 'RGB':
+#                 random_ref_frame = random_ref_frame.convert('RGB')
+#             random_ref_dwpose = pose_ref 
+#             if random_ref_dwpose.mode != 'RGB':
+#                 random_ref_dwpose = random_ref_dwpose.convert('RGB')
+#             for i_index in range(start_frame, end_frame, stride):
+#                 # import pdb; pdb.set_trace()
+#                 if i_index == start_frame and first_eq_ref:
+#                     # print("i_index == start_frame and first_eq_ref:")
+#                     i_key = list(frames_all.keys())[i_index]
+#                     i_frame = frames_all[i_key]
 
-            
-
-            # 打开文件（以二进制读取模式）
-            with open(pose_embedding_key, 'rb') as file:
-                # 使用 pickle.load() 方法读取字典
-                loaded_data = pickle.load(file)
-
-            try:
-                ref_pose_embedding_key = pose_embedding_key.replace(".pkl", "_ref_pose.pkl")
-                with open(ref_pose_embedding_key, 'rb') as file:
-                    # 使用 pickle.load() 方法读取字典
-                    ref_loaded_data = pickle.load(file)
-                    ref_pose_embedding = process_single_pose_embedding(ref_loaded_data)
-
-            except:
-                ref_pose_embedding = process_single_pose_embedding_katong(loaded_data, 0)
-
-
-            first_image = True
-            for ii_index in sorted(os.listdir(pose_file_path)):
-                # ii_index = ii_index.strip()
-
-                if ii_index != "ref_pose.jpg":
-
-                    dwpose_all[ii_index] = Image.open(pose_file_path+"/"+ii_index)
-                    frames_all[ii_index] = Image.fromarray(cv2.cvtColor(cv2.imread(ref_image_path),cv2.COLOR_BGR2RGB)) 
-
-                    try:
-                        i_index = int(ii_index.split('.')[0])
-                    except:
-                        i_index = int(ii_index.split('.')[0].split('_')[1])
-                    try:
-                        pose_embedding_all[ii_index] = process_single_pose_embedding( loaded_data[i_index]) # (2, 128)
-                    except:
-                        pose_embedding_all[ii_index] = process_single_pose_embedding_katong( loaded_data, i_index) # (2, 128)
-
-            for ii_index in sorted(os.listdir(original_driven_video_path)):
-
-                original_driven_video_all[ii_index] = Image.open(original_driven_video_path+"/"+ii_index)
-
-
-                # frames_all[ii_index] = Image.open(ref_image_path)
-            pose_ref_path = os.path.join(pose_file_path, "ref_pose.jpg")
-            if os.path.exists(pose_ref_path) == False:
-                pose_ref_path = os.path.join(pose_file_path, os.listdir(pose_file_path)[0])
-            pose_ref = Image.open(pose_ref_path)
-            first_eq_ref = False
-
-            # sample max_frames poses for video generation
-            stride = frame_interval
-            _total_frame_num = len(frames_all)
-            cover_frame_num = (stride * (max_frames-1)+1)
-            if _total_frame_num < cover_frame_num:
-                print('_total_frame_num is smaller than cover_frame_num, the sampled frame interval is changed')
-                start_frame = 0   # we set start_frame = 0 because the pose alignment is performed on the first frame
-                end_frame = _total_frame_num
-                stride = max((_total_frame_num-1//(max_frames-1)),1)
-                end_frame = stride*max_frames
-            else:
-                start_frame = 0  # we set start_frame = 0 because the pose alignment is performed on the first frame
-                end_frame = start_frame + cover_frame_num
-            
-            frame_list = []
-            dwpose_list = []
-            original_driven_video_list = []
-            pose_embedding_list = []
-            random_ref_frame = frames_all[list(frames_all.keys())[0]]
-            if random_ref_frame.mode != 'RGB':
-                random_ref_frame = random_ref_frame.convert('RGB')
-            random_ref_dwpose = pose_ref 
-            if random_ref_dwpose.mode != 'RGB':
-                random_ref_dwpose = random_ref_dwpose.convert('RGB')
-            for i_index in range(start_frame, end_frame, stride):
-                # import pdb; pdb.set_trace()
-                if i_index == start_frame and first_eq_ref:
-                    # print("i_index == start_frame and first_eq_ref:")
-                    i_key = list(frames_all.keys())[i_index]
-                    i_frame = frames_all[i_key]
-
-                    if i_frame.mode != 'RGB':
-                        i_frame = i_frame.convert('RGB')
-                    i_dwpose = frames_pose_ref
-                    if i_dwpose.mode != 'RGB':
-                        i_dwpose = i_dwpose.convert('RGB')
-                    frame_list.append(i_frame)
-                    dwpose_list.append(i_dwpose)
-                else:
-                    # added 
+#                     if i_frame.mode != 'RGB':
+#                         i_frame = i_frame.convert('RGB')
+#                     i_dwpose = frames_pose_ref
+#                     if i_dwpose.mode != 'RGB':
+#                         i_dwpose = i_dwpose.convert('RGB')
+#                     frame_list.append(i_frame)
+#                     dwpose_list.append(i_dwpose)
+#                 else:
+#                     # added 
                     
-                    if first_eq_ref:
-                        i_index = i_index - stride
-                    # print("key = list(frames_all.keys())[i_index]")
-                    i_key = list(frames_all.keys())[i_index]
-                    i_frame = frames_all[i_key]
-                    if i_frame.mode != 'RGB':
-                        i_frame = i_frame.convert('RGB')
-                    i_dwpose = dwpose_all[i_key]
-                    # ii_index = ii_index.strip()
-                    # print(original_driven_video_all.keys())
-                    i_original_driven_video = original_driven_video_all[i_key.strip()]
-                    i_pose_embedding = pose_embedding_all[i_key]
-                    if i_dwpose.mode != 'RGB':
-                        i_dwpose = i_dwpose.convert('RGB')
+#                     if first_eq_ref:
+#                         i_index = i_index - stride
+#                     # print("key = list(frames_all.keys())[i_index]")
+#                     i_key = list(frames_all.keys())[i_index]
+#                     i_frame = frames_all[i_key]
+#                     if i_frame.mode != 'RGB':
+#                         i_frame = i_frame.convert('RGB')
+#                     i_dwpose = dwpose_all[i_key]
+#                     # ii_index = ii_index.strip()
+#                     # print(original_driven_video_all.keys())
+#                     i_original_driven_video = original_driven_video_all[i_key.strip()]
+#                     i_pose_embedding = pose_embedding_all[i_key]
+#                     if i_dwpose.mode != 'RGB':
+#                         i_dwpose = i_dwpose.convert('RGB')
 
-                    if i_original_driven_video.mode != 'RGB':
-                        i_original_driven_video = i_original_driven_video.convert('RGB')
-                    frame_list.append(i_frame)
-                    dwpose_list.append(i_dwpose)
-                    original_driven_video_list.append(i_original_driven_video)
+#                     if i_original_driven_video.mode != 'RGB':
+#                         i_original_driven_video = i_original_driven_video.convert('RGB')
+#                     frame_list.append(i_frame)
+#                     dwpose_list.append(i_dwpose)
+#                     original_driven_video_list.append(i_original_driven_video)
 
 
-                    pose_embedding_list.append(i_pose_embedding)
+#                     pose_embedding_list.append(i_pose_embedding)
 
-            have_frames = len(frame_list)>0
-            middle_indix = 0
-            if have_frames:
-                ref_frame = frame_list[middle_indix]
+#             have_frames = len(frame_list)>0
+#             middle_indix = 0
+#             if have_frames:
+#                 ref_frame = frame_list[middle_indix]
 
-                vit_frame = vit_transforms(ref_frame)
-                random_ref_frame_tmp = train_trans_pose(random_ref_frame)
-                random_ref_dwpose_tmp = train_trans_pose(random_ref_dwpose) 
+#                 vit_frame = vit_transforms(ref_frame)
+#                 random_ref_frame_tmp = train_trans_pose(random_ref_frame)
+#                 random_ref_dwpose_tmp = train_trans_pose(random_ref_dwpose) 
                 
-                original_driven_video_data_tmp = torch.stack([vit_transforms(ss) for ss in original_driven_video_list], dim=0)
+#                 original_driven_video_data_tmp = torch.stack([vit_transforms(ss) for ss in original_driven_video_list], dim=0)
 
                 
-                ref_pose_embedding_tmp = torch.from_numpy(ref_pose_embedding)
+#                 ref_pose_embedding_tmp = torch.from_numpy(ref_pose_embedding)
                 
-                misc_data_tmp = torch.stack([train_trans_pose(ss) for ss in frame_list], dim=0)
-                video_data_tmp = torch.stack([train_trans(ss) for ss in frame_list], dim=0) 
-                dwpose_data_tmp = torch.stack([train_trans_pose(ss) for ss in dwpose_list], dim=0)
+#                 misc_data_tmp = torch.stack([train_trans_pose(ss) for ss in frame_list], dim=0)
+#                 video_data_tmp = torch.stack([train_trans(ss) for ss in frame_list], dim=0) 
+#                 dwpose_data_tmp = torch.stack([train_trans_pose(ss) for ss in dwpose_list], dim=0)
                 
-                pose_embedding_tmp = torch.stack([torch.from_numpy(ss) for ss in pose_embedding_list], dim=0)
+#                 pose_embedding_tmp = torch.stack([torch.from_numpy(ss) for ss in pose_embedding_list], dim=0)
             
 
-            video_data = torch.zeros(max_frames, 3, resolution[1], resolution[0])
-            dwpose_data = torch.zeros(max_frames, 3, resolution[1], resolution[0])
+#             video_data = torch.zeros(max_frames, 3, resolution[1], resolution[0])
+#             dwpose_data = torch.zeros(max_frames, 3, resolution[1], resolution[0])
 
-            original_driven_video_data = torch.zeros(max_frames, 3, 224, 224)
+#             original_driven_video_data = torch.zeros(max_frames, 3, 224, 224)
 
-            pose_embedding = torch.zeros(max_frames, 2, pose_embedding_dim)
-            ref_pose_embedding = torch.zeros(max_frames, 2, pose_embedding_dim)
+#             pose_embedding = torch.zeros(max_frames, 2, pose_embedding_dim)
+#             ref_pose_embedding = torch.zeros(max_frames, 2, pose_embedding_dim)
 
-            misc_data = torch.zeros(max_frames, 3, resolution[1], resolution[0])
-            random_ref_frame_data = torch.zeros(max_frames, 3, resolution[1], resolution[0]) # [32, 3, 512, 768]
-            random_ref_dwpose_data = torch.zeros(max_frames, 3, resolution[1], resolution[0])
-            if have_frames:
-                video_data[:len(frame_list), ...] = video_data_tmp      
-                misc_data[:len(frame_list), ...] = misc_data_tmp
-                dwpose_data[:len(frame_list), ...] = dwpose_data_tmp
+#             misc_data = torch.zeros(max_frames, 3, resolution[1], resolution[0])
+#             random_ref_frame_data = torch.zeros(max_frames, 3, resolution[1], resolution[0]) # [32, 3, 512, 768]
+#             random_ref_dwpose_data = torch.zeros(max_frames, 3, resolution[1], resolution[0])
+#             if have_frames:
+#                 video_data[:len(frame_list), ...] = video_data_tmp      
+#                 misc_data[:len(frame_list), ...] = misc_data_tmp
+#                 dwpose_data[:len(frame_list), ...] = dwpose_data_tmp
 
-                original_driven_video_data[:len(frame_list), ...] = original_driven_video_data_tmp
+#                 original_driven_video_data[:len(frame_list), ...] = original_driven_video_data_tmp
 
-                pose_embedding[:len(frame_list), ...] = pose_embedding_tmp
-                # print("random_ref_frame_tmp.shape", random_ref_frame_tmp.shape)
-                random_ref_frame_data[:,...] = random_ref_frame_tmp
-                # print("random_ref_frame_data.shape", random_ref_frame_data.shape)
-                random_ref_dwpose_data[:,...] = random_ref_dwpose_tmp
+#                 pose_embedding[:len(frame_list), ...] = pose_embedding_tmp
+#                 # print("random_ref_frame_tmp.shape", random_ref_frame_tmp.shape)
+#                 random_ref_frame_data[:,...] = random_ref_frame_tmp
+#                 # print("random_ref_frame_data.shape", random_ref_frame_data.shape)
+#                 random_ref_dwpose_data[:,...] = random_ref_dwpose_tmp
 
 
-                ref_pose_embedding[:,...] = ref_pose_embedding_tmp
+#                 ref_pose_embedding[:,...] = ref_pose_embedding_tmp
             
-            break
+#             break
             
-        # except Exception as e:
-        #     logging.info('{} read video frame failed with error: {}'.format(pose_file_path, e))
-        #     continue
+#         # except Exception as e:
+#         #     logging.info('{} read video frame failed with error: {}'.format(pose_file_path, e))
+#         #     continue
     
-    return vit_frame, video_data, misc_data, dwpose_data, random_ref_frame_data, random_ref_dwpose_data, pose_embedding, ref_pose_embedding, original_driven_video_data
-
-
+#     return vit_frame, video_data, misc_data, dwpose_data, random_ref_frame_data, random_ref_dwpose_data, pose_embedding, ref_pose_embedding, original_driven_video_data
 
 def worker(gpu, cfg, cfg_update):
     '''
     Inference worker for each gpu
     '''
+
     for k, v in cfg_update.items():
         if isinstance(v, dict) and k in cfg:
             cfg[k].update(v)
@@ -299,7 +347,8 @@ def worker(gpu, cfg, cfg_update):
 
     # [Log] Save logging and make log dir
     log_dir = generalized_all_gather(cfg.log_dir)[0]
-    inf_name = osp.basename(cfg.cfg_file).split('.')[0]
+   # inf_name = osp.basename(cfg.cfg_file).split('.')[0]
+    inf_name = "inference_log"
     test_model = osp.basename(cfg.test_model).split('.')[0].split('_')[-1]
     
     cfg.log_dir = osp.join(cfg.log_dir, '%s' % (inf_name))
@@ -313,11 +362,11 @@ def worker(gpu, cfg, cfg_update):
         handlers=[
             logging.FileHandler(filename=log_file),
             logging.StreamHandler(stream=sys.stdout)])
-    logging.info(cfg)
+    # logging.info(cfg)
     logging.info(f"Running Animate-X inference on gpu {gpu}")
     
     # [Diffusion]
-    diffusion = DIFFUSION.build(cfg.Diffusion)
+    # diffusion = DIFFUSION.build(cfg.Diffusion)
 
     # [Data] Data Transform    
     train_trans = data.Compose([
@@ -338,14 +387,13 @@ def worker(gpu, cfg, cfg_update):
                 T.Normalize(mean=cfg.vit_mean, std=cfg.vit_std)])
 
     # [Model] embedder
-    clip_encoder = EMBEDDER.build(cfg.embedder)
+    # clip_encoder = EMBEDDER.build(cfg.embedder)
     clip_encoder.model.to(gpu)
     with torch.no_grad():
         _, _, zero_y = clip_encoder(text="")
-    
 
     # [Model] auotoencoder 
-    autoencoder = AUTO_ENCODER.build(cfg.auto_encoder)
+   # autoencoder = AUTO_ENCODER.build(cfg.auto_encoder)
     autoencoder.eval() # freeze
     for param in autoencoder.parameters():
         param.requires_grad = False
@@ -355,7 +403,9 @@ def worker(gpu, cfg, cfg_update):
     if "config" in cfg.UNet:
         cfg.UNet["config"] = cfg
     cfg.UNet["zero_y"] = zero_y
-    model = MODEL.build(cfg.UNet)
+   # model = MODEL.build(cfg.UNet)
+    model = unet
+
     state_dict = torch.load(cfg.test_model, map_location='cpu')
     if 'state_dict' in state_dict:
         state_dict = state_dict['state_dict']
@@ -371,7 +421,7 @@ def worker(gpu, cfg, cfg_update):
             if 'pose_embedding_before.pos_embed.pos_table' in key:  
                 del state_dict[key]
         status = model.load_state_dict(state_dict, strict=False)
-    logging.info('Load model from {} with status {}'.format(cfg.test_model, status))
+#    logging.info('Load model from {} with status {}'.format(cfg.test_model, status))
     model = model.to(gpu)
     model.eval()
     if hasattr(cfg, "CPU_CLIP_VAE") and cfg.CPU_CLIP_VAE:
@@ -404,7 +454,7 @@ def worker(gpu, cfg, cfg_update):
         manual_seed = int(current_seed + cfg.rank + idx//num_videos)
         setup_seed(manual_seed)
 
-        logging.info(f"[{idx}]/[{len(test_list)}] Begin to sample {ref_image_key}, pose sequence from {pose_seq_key} init seed {manual_seed} ...")
+   #     logging.info(f"[{idx}]/[{len(test_list)}] Begin to sample {ref_image_key}, pose sequence from {pose_seq_key} init seed {manual_seed} ...")
         
 
         vit_frame, video_data, misc_data, dwpose_data, random_ref_frame_data, random_ref_dwpose_data, pose_embedding, ref_pose_embedding, original_driven_video_data = load_video_frames(ref_image_key, pose_seq_key, original_driven_video_seq_key, pose_embedding_key, train_trans, vit_transforms, train_trans_pose, max_frames=cfg.max_frames, frame_interval =cfg.frame_interval, resolution=cfg.resolution)
@@ -498,7 +548,7 @@ def worker(gpu, cfg, cfg_update):
             # print("original_driven_video_data_embedding.shape: ", original_driven_video_data_embedding.shape)
             original_driven_video_data_embedding = original_driven_video_data_embedding.clone()
 
-        with amp.autocast(enabled=True):
+        with torch.amp.autocast("cuda"):
             pynvml.nvmlInit()
             handle=pynvml.nvmlDeviceGetHandleByIndex(0)
             meminfo=pynvml.nvmlDeviceGetMemoryInfo(handle)
@@ -582,8 +632,6 @@ def worker(gpu, cfg, cfg_update):
                     ddim_timesteps=cfg.ddim_timesteps,
                     eta=0.0)
                 
-                # print("video_data = diffusion.ddim_sample_", video_data.shape) #torch.Size([1, 4, 32, 96, 64])
-
                 if hasattr(cfg, "CPU_CLIP_VAE") and cfg.CPU_CLIP_VAE:
                     # if run forward of  autoencoder or clip_encoder second times, load them again
                     clip_encoder.cuda()

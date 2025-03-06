@@ -2,7 +2,6 @@ import copy
 import inspect
 import warnings
 
-
 def build_from_config(cfg, registry, **kwargs):
     """ Default builder function.
 
@@ -20,7 +19,6 @@ def build_from_config(cfg, registry, **kwargs):
         KeyError:
         Exception:
     """
-
 
     if not isinstance(cfg, dict):
         raise TypeError(f"config must be type dict, got {type(cfg)}")

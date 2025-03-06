@@ -9,8 +9,6 @@ from einops import rearrange
 from functools import partial
 import torch.nn.functional as F
 import torch.nn.init as init
-from rotary_embedding_torch import RotaryEmbedding
-from fairscale.nn.checkpoint import checkpoint_wrapper
 
 def sinusoidal_embedding(timesteps, dim):
     # check input

@@ -29,7 +29,7 @@ class Config(object):
             "--cfg",
             dest="cfg_file",
             help="Path to the configuration file",
-            default='configs/Animate_X_infer.yaml'
+            default='/configs/Animate_X_infer.yaml'
         )
         parser.add_argument(
             "--init_method",
